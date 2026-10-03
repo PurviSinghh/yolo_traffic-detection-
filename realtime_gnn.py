@@ -1,47 +1,19 @@
 import cv2
 import torch
 from ultralytics import YOLO
-
 from torch_geometric.data import Data
 from torch_geometric.nn import GCNConv, global_mean_pool
 
 
-# ============================================================
-# 1. START
-# ============================================================
-
-print("Starting Real-Time Traffic GNN...")
+# SETTINGS
 
 
-# ============================================================
-# 2. LOAD YOLO
-# ============================================================
+VIDEO_PATH = "yolo_traffic mp4 .mp4"
+MODEL_PATH = "traffic_gnn.pth"
 
-model = YOLO("yolo11n.pt")
+DISTANCE_THRESHOLD = 150
 
-print("YOLO loaded successfully.")
-
-
-# ============================================================
-# 3. OPEN VIDEO
-# ============================================================
-
-video_path = "yolo_traffic mp4 .mp4"
-
-cap = cv2.VideoCapture(video_path)
-
-if not cap.isOpened():
-    print("ERROR: Could not open video.")
-    exit()
-
-print("Video opened successfully.")
-
-
-# ============================================================
-# 4. VEHICLE CLASSES
-# ============================================================
-
-vehicle_classes = {
+CLASS_NAMES = {
     2: "Car",
     3: "Motorcycle",
     5: "Bus",
@@ -49,51 +21,18 @@ vehicle_classes = {
 }
 
 
-# ============================================================
-# 5. ROI
-# ============================================================
 
-ROI_X1 = 0.10
-ROI_Y1 = 0.30
-ROI_X2 = 0.90
-ROI_Y2 = 0.95
+# GNN MODEL
 
-
-# ============================================================
-# 6. VEHICLE TYPE ENCODING
-# ============================================================
-
-type_encoding = {
-    "Car": 0,
-    "Motorcycle": 1,
-    "Bus": 2,
-    "Truck": 3
-}
-
-
-# ============================================================
-# 7. TRAFFIC LEVELS
-# ============================================================
-
-traffic_levels = {
-    0: "LOW",
-    1: "MEDIUM",
-    2: "HIGH"
-}
-
-
-# ============================================================
-# 8. GNN MODEL
-# ============================================================
 
 class TrafficGNN(torch.nn.Module):
 
     def __init__(self):
         super().__init__()
 
-        # These names match traffic_gnn.pth
         self.gcn1 = GCNConv(3, 16)
         self.gcn2 = GCNConv(16, 8)
+
         self.classifier = torch.nn.Linear(8, 3)
 
     def forward(self, x, edge_index, batch):
@@ -111,16 +50,36 @@ class TrafficGNN(torch.nn.Module):
         return x
 
 
-# ============================================================
-# 9. LOAD TRAINED GNN
-# ============================================================
+# START
 
+
+print("Starting Real-Time Traffic GNN...")
+
+
+# Load YOLO
+yolo_model = YOLO("yolo11n.pt")
+
+print("YOLO loaded successfully.")
+
+
+# Open video
+cap = cv2.VideoCapture(VIDEO_PATH)
+
+if not cap.isOpened():
+    print("ERROR: Could not open video.")
+    exit()
+
+print("Video opened successfully.")
+
+
+# Load trained GNN
 gnn_model = TrafficGNN()
 
 gnn_model.load_state_dict(
     torch.load(
-        "traffic_gnn.pth",
-        map_location="cpu"
+        MODEL_PATH,
+        map_location="cpu",
+        weights_only=True
     )
 )
 
@@ -129,16 +88,8 @@ gnn_model.eval()
 print("Trained GNN loaded successfully.")
 
 
-# ============================================================
-# 10. GRAPH DISTANCE
-# ============================================================
+# PROCESS VIDEO
 
-DISTANCE_THRESHOLD = 150
-
-
-# ============================================================
-# 11. PROCESS VIDEO
-# ============================================================
 
 while True:
 
@@ -148,307 +99,217 @@ while True:
         print("Video finished.")
         break
 
-
     height, width = frame.shape[:2]
 
+    # ROI
+    
 
-    # --------------------------------------------------------
-    # ROI coordinates
-    # --------------------------------------------------------
+    x1 = int(width * 0.10)
+    y1 = int(height * 0.30)
 
-    roi_x1 = int(width * ROI_X1)
-    roi_y1 = int(height * ROI_Y1)
-
-    roi_x2 = int(width * ROI_X2)
-    roi_y2 = int(height * ROI_Y2)
+    x2 = int(width * 0.90)
+    y2 = int(height * 0.95)
 
 
-    # --------------------------------------------------------
-    # YOLO + BoT-SORT
-    # --------------------------------------------------------
+    
+    # YOLO + BOT-SORT
+    
 
-    results = model.track(
+    results = yolo_model.track(
         frame,
         persist=True,
         tracker="botsort.yaml",
         verbose=False
     )
 
+    result = results[0]
 
-    # --------------------------------------------------------
-    # Store vehicles
-    # --------------------------------------------------------
-
-    frame_data = []
+    # VEHICLE INFORMATION
 
 
-    # --------------------------------------------------------
-    # Process detections
-    # --------------------------------------------------------
+    node_features = []
+    positions = []
 
-    for result in results:
+    if result.boxes is not None:
 
-        if result.boxes is None:
-            continue
+        for box in result.boxes:
 
+            cls = int(box.cls[0])
 
-        for i in range(len(result.boxes)):
-
-            class_id = int(
-                result.boxes.cls[i].item()
-            )
-
-
-            # Only vehicles
-            if class_id not in vehicle_classes:
+            if cls not in CLASS_NAMES:
                 continue
 
-
-            vehicle_type = vehicle_classes[class_id]
-
-
             # Bounding box
-            x1, y1, x2, y2 = map(
-                int,
-                result.boxes.xyxy[i].tolist()
-            )
+            bx1, by1, bx2, by2 = box.xyxy[0].tolist()
+
+            center_x = (bx1 + bx2) / 2
+            center_y = (by1 + by2) / 2
 
 
-            # Center point
-            center_x = int((x1 + x2) / 2)
-            center_y = int((y1 + y2) / 2)
-
-
-            # ------------------------------------------------
-            # ROI filtering
-            # ------------------------------------------------
-
+            # Check ROI
             if not (
-                roi_x1 <= center_x <= roi_x2
-                and
-                roi_y1 <= center_y <= roi_y2
+                x1 <= center_x <= x2
+                and y1 <= center_y <= y2
             ):
                 continue
 
 
-            # Store vehicle
-            frame_data.append({
-                "type": vehicle_type,
-                "x": center_x,
-                "y": center_y
-            })
+            # Vehicle type encoding
+            if cls == 2:
+                vehicle_type = 0
+
+            elif cls == 3:
+                vehicle_type = 1
+
+            elif cls == 5:
+                vehicle_type = 2
+
+            else:
+                vehicle_type = 3
 
 
-            # ------------------------------------------------
-            # Draw bounding box
-            # ------------------------------------------------
-
-            cv2.rectangle(
-                frame,
-                (x1, y1),
-                (x2, y2),
-                (0, 255, 0),
-                2
-            )
-
-
-            # Vehicle label
-            cv2.putText(
-                frame,
+            # Same type of features used during training
+            node_features.append([
                 vehicle_type,
-                (x1, y1 - 10),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                (0, 255, 0),
-                2
-            )
-
-
-    # ========================================================
-    # 12. VEHICLE COUNT
-    # ========================================================
-
-    vehicle_count = len(frame_data)
-
-
-    # Default state
-    traffic_state = "NO VEHICLES"
-
-
-    # ========================================================
-    # 13. CREATE GRAPH
-    # ========================================================
-
-    if vehicle_count > 0:
-
-        nodes = []
-        positions = []
-
-
-        # ----------------------------------------------------
-        # Create graph nodes
-        # ----------------------------------------------------
-
-        for vehicle in frame_data:
-
-            vehicle_type = vehicle["type"]
-            x_position = vehicle["x"]
-            y_position = vehicle["y"]
-
-
-            nodes.append([
-                type_encoding[vehicle_type],
-                x_position,
-                y_position
+                center_x,
+                center_y
             ])
 
-
             positions.append(
-                (x_position, y_position)
+                (center_x, center_y)
             )
 
 
-        # ----------------------------------------------------
-        # Node tensor
-        # ----------------------------------------------------
+    
+    # CREATE GRAPH
+
+
+    if len(node_features) > 0:
 
         x = torch.tensor(
-            nodes,
+            node_features,
             dtype=torch.float
         )
 
-
-        # ----------------------------------------------------
-        # Create edges
-        # ----------------------------------------------------
-
         edges = []
-
 
         for i in range(len(positions)):
 
             for j in range(i + 1, len(positions)):
 
-                x1, y1 = positions[i]
-                x2, y2 = positions[j]
+                dx = positions[i][0] - positions[j][0]
+                dy = positions[i][1] - positions[j][1]
 
+                distance = (dx * dx + dy * dy) ** 0.5
 
-                distance = (
-                    (x1 - x2) ** 2 +
-                    (y1 - y2) ** 2
-                ) ** 0.5
-
-
-                if distance < DISTANCE_THRESHOLD:
+                if distance <= DISTANCE_THRESHOLD:
 
                     edges.append([i, j])
                     edges.append([j, i])
 
 
-        # ----------------------------------------------------
-        # Edge tensor
-        # ----------------------------------------------------
-
-        if len(edges) > 0:
-
-            edge_index = torch.tensor(
-                edges,
-                dtype=torch.long
-            ).t().contiguous()
-
-        else:
+        # If no edges exist
+        if len(edges) == 0:
 
             edge_index = torch.empty(
                 (2, 0),
                 dtype=torch.long
             )
 
+        else:
 
-        # ----------------------------------------------------
-        # Create graph
-        # ----------------------------------------------------
-
-        graph = Data(
-            x=x,
-            edge_index=edge_index
-        )
+            edge_index = torch.tensor(
+                edges,
+                dtype=torch.long
+            ).t().contiguous()
 
 
-        # ====================================================
-        # 14. GNN PREDICTION
-        # ====================================================
-
+        # One graph
         batch = torch.zeros(
-            graph.x.size(0),
+            x.size(0),
             dtype=torch.long
         )
 
 
+        
+        # GNN PREDICTION
+        
+
         with torch.no_grad():
 
             output = gnn_model(
-                graph.x,
-                graph.edge_index,
+                x,
+                edge_index,
                 batch
             )
 
-
-            prediction = output.argmax(
+            prediction = torch.argmax(
+                output,
                 dim=1
             ).item()
 
 
-            traffic_state = traffic_levels[
-                prediction
-            ]
+        # Convert prediction to traffic level
+
+        if prediction == 0:
+            traffic_level = "LOW"
+
+        elif prediction == 1:
+            traffic_level = "MEDIUM"
+
+        else:
+            traffic_level = "HIGH"
 
 
-    # ========================================================
-    # 15. DRAW ROI
-    # ========================================================
+    else:
+
+        traffic_level = "LOW"
+
+
+    # DRAW YOLO RESULTS
+
+
+    frame = result.plot()
+
+
+    
+    # DRAW ROI
+    
 
     cv2.rectangle(
         frame,
-        (roi_x1, roi_y1),
-        (roi_x2, roi_y2),
-        (255, 255, 0),
+        (x1, y1),
+        (x2, y2),
+        (255, 255, 255),
         2
     )
 
 
-    # ========================================================
-    # 16. DISPLAY VEHICLE COUNT
-    # ========================================================
+    
+    # DISPLAY GNN RESULT
+
+    cv2.rectangle(
+        frame,
+        (10, 10),
+        (400, 80),
+        (0, 0, 0),
+        -1
+    )
 
     cv2.putText(
         frame,
-        f"VEHICLES: {vehicle_count}",
-        (20, 40),
+        f"GNN TRAFFIC: {traffic_level}",
+        (20, 55),
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.8,
+        1,
         (0, 255, 0),
         2
     )
 
 
-    # ========================================================
-    # 17. DISPLAY GNN PREDICTION
-    # ========================================================
-
-    cv2.putText(
-        frame,
-        f"GNN TRAFFIC: {traffic_state}",
-        (20, 80),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.8,
-        (0, 0, 255),
-        2
-    )
-
-
-    # ========================================================
-    # 18. SHOW VIDEO
-    # ========================================================
+    
+    # SHOW VIDEO
+    
 
     cv2.imshow(
         "Real-Time Traffic GNN",
@@ -456,16 +317,15 @@ while True:
     )
 
 
-    # Press Q to stop
+    # Press Q to quit
     if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
 
-# ============================================================
-# 19. CLOSE
-# ============================================================
+# CLEANUP
 
 cap.release()
+
 cv2.destroyAllWindows()
 
 print("Real-Time GNN processing completed.")
