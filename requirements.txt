@@ -1,3 +1,8 @@
+# ===================================================
+# Smart Traffic Management System — Requirements
+# ===================================================
+
+# --- Existing (unchanged) ---
 ultralytics>=8.4.0
 torch>=2.0.0
 torchvision>=0.15.0
@@ -5,3 +10,12 @@ opencv-python>=4.8.0
 numpy>=1.24.0
 pillow>=10.0.0
 matplotlib>=3.7.0
+
+# --- Web backend (new) ---
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+websockets>=12.0
+python-multipart>=0.0.9
+
+# --- PyTorch Geometric (existing) ---
+torch-geometric>=2.4.0

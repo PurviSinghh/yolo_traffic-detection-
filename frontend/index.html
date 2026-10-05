@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Traffic Management Dashboard</title>
+  <meta name="description" content="Real-time smart traffic monitoring dashboard using YOLOv11, GNN, SUMO and Federated MARL" />
+  <link rel="stylesheet" href="/static/style.css" />
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- =====================================================
+     SIDEBAR
+     ===================================================== -->
+<nav id="sidebar">
+  <div class="sidebar-logo">
+    <span class="logo-icon">🚦</span>
+    <div class="logo-text">
+      Smart Traffic AI
+      <span>YOLOv11 · GNN · MARL</span>
+    </div>
+  </div>
+
+  <div class="sidebar-nav">
+    <div class="nav-section-label">Main</div>
+    <a class="nav-item active" data-page="dashboard" onclick="showPage('dashboard')">
+      <span class="nav-icon">📊</span>
+      <span class="nav-label">Dashboard</span>
+    </a>
+    <a class="nav-item" data-page="live" onclick="showPage('live')">
+      <span class="nav-icon">📹</span>
+      <span class="nav-label">Live Traffic</span>
+    </a>
+    <a class="nav-item" data-page="analysis" onclick="showPage('analysis')">
+      <span class="nav-icon">📈</span>
+      <span class="nav-label">Traffic Analysis</span>
+    </a>
+
+    <div class="nav-section-label">Control</div>
+    <a class="nav-item" data-page="signals" onclick="showPage('signals')">
+      <span class="nav-icon">🚦</span>
+      <span class="nav-label">Traffic Signals</span>
+    </a>
+    <a class="nav-item" data-page="sumo" onclick="showPage('sumo')">
+      <span class="nav-icon">🛣️</span>
+      <span class="nav-label">SUMO Simulation</span>
+    </a>
+    <a class="nav-item" data-page="marl" onclick="showPage('marl')">
+      <span class="nav-icon">🤖</span>
+      <span class="nav-label">Federated MARL</span>
+    </a>
+
+    <div class="nav-section-label">Safety</div>
+    <a class="nav-item" data-page="emergency" onclick="showPage('emergency')">
+      <span class="nav-icon">🚨</span>
+      <span class="nav-label">Emergency Priority</span>
+    </a>
+
+    <div class="nav-section-label">System</div>
+    <a class="nav-item" data-page="logs" onclick="showPage('logs')">
+      <span class="nav-icon">📋</span>
+      <span class="nav-label">System Logs</span>
+    </a>
+    <a class="nav-item" data-page="settings" onclick="showPage('settings')">
+      <span class="nav-icon">⚙️</span>
+      <span class="nav-label">Settings</span>
+    </a>
+  </div>
+
+  <div class="sidebar-footer">
+    Smart Traffic v1.0<br>
+    Backend: FastAPI · WS
+  </div>
+</nav>
+
+<!-- =====================================================
+     MAIN CONTENT
+     ===================================================== -->
+<div id="main-content">
+
+  <!-- TOP BAR -->
+  <header id="topbar">
+    <div class="topbar-title">Smart Traffic <span>Management System</span></div>
+    <div class="topbar-right">
+      <span id="system-status-dot"></span>
+      <span class="topbar-status">System <strong id="sys-status-label">Online</strong></span>
+      <span id="server-clock">--:--:--</span>
+      <span id="ws-status" class="disconnected">Disconnected</span>
+    </div>
+  </header>
+
+  <!-- PAGES -->
+  <div id="pages">
+
+    <!-- ===================================================
+         PAGE: DASHBOARD
+         =================================================== -->
+    <section id="page-dashboard" class="page active">
+      <h1 style="font-size:22px;font-weight:800;margin-bottom:4px;">Traffic Dashboard</h1>
+      <p class="text-gray mb-24">YOLOv11 · BoT-SORT · GNN Real-Time Monitoring</p>
+
+      <!-- KPI Row -->
+      <div class="stat-grid">
+        <div class="stat-card blue">
+          <div class="stat-icon">🚗</div>
+          <div class="stat-label">Total Vehicles</div>
+          <div class="stat-value" id="kpi-total">0</div>
+          <div class="stat-sub">In ROI</div>
+        </div>
+        <div class="stat-card cyan">
+          <div class="stat-icon">🚙</div>
+          <div class="stat-label">Cars</div>
+          <div class="stat-value" id="kpi-cars">0</div>
+        </div>
+        <div class="stat-card purple">
+          <div class="stat-icon">🏍️</div>
+          <div class="stat-label">Motorcycles</div>
+          <div class="stat-value" id="kpi-moto">0</div>
+        </div>
+        <div class="stat-card yellow">
+          <div class="stat-icon">🚌</div>
+          <div class="stat-label">Buses</div>
+          <div class="stat-value" id="kpi-buses">0</div>
+        </div>
+        <div class="stat-card pink">
+          <div class="stat-icon">🚚</div>
+          <div class="stat-label">Trucks</div>
+          <div class="stat-value" id="kpi-trucks">0</div>
+        </div>
+        <div class="stat-card green">
+          <div class="stat-icon">📊</div>
+          <div class="stat-label">Density</div>
+          <div class="stat-value" id="kpi-density">0%</div>
+        </div>
+        <div class="stat-card red">
+          <div class="stat-icon">🧠</div>
+          <div class="stat-label">GNN Prediction</div>
+          <div class="stat-value" id="kpi-gnn" style="font-size:18px;">LOW</div>
+        </div>
+        <div class="stat-card blue">
+          <div class="stat-icon">🎥</div>
+          <div class="stat-label">Detection</div>
+          <div class="stat-value" id="kpi-detection" style="font-size:16px;">Ready</div>
+        </div>
+      </div>
+
+      <!-- Two-col: Video + Traffic Level -->
+      <div class="two-col mb-24">
+        <!-- Live video feed -->
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div class="card-header" style="padding:16px 20px;">
+            <div class="card-title">📹 Live Detection Feed</div>
+            <span class="badge badge-live" id="feed-badge">OFFLINE</span>
+          </div>
+          <div id="video-container">
+            <img id="video-feed" alt="Live traffic feed" />
+            <div id="video-placeholder">
+              <div class="big-icon">📷</div>
+              <p>Start Detection to see live feed</p>
+            </div>
+            <div id="video-overlay">
+              <span class="overlay-badge" id="ov-frame">Frame: 0</span>
+              <span class="overlay-badge" id="ov-level">Level: LOW</span>
+            </div>
+          </div>
+          <div style="padding:14px 20px;display:flex;gap:10px;border-top:1px solid var(--border);">
+            <button class="btn btn-green" id="btn-start-det" onclick="startDetection()">▶ Start Detection</button>
+            <button class="btn btn-red"   id="btn-stop-det"  onclick="stopDetection()" disabled>⏹ Stop</button>
+          </div>
+        </div>
+
+        <!-- Traffic status panel -->
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <!-- Traffic level -->
+          <div class="card">
+            <div class="card-title mb-16">🚦 Traffic Level</div>
+            <div style="text-align:center;padding:12px 0;">
+              <div class="traffic-level-badge LOW" id="traffic-level-badge">LOW</div>
+              <div style="margin-top:12px;font-size:12px;color:var(--gray);">
+                Based on vehicle count + GNN prediction
+              </div>
+            </div>
+            <div style="margin-top:14px;">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;">
+                <span style="color:var(--gray);">Traffic Density</span>
+                <span id="density-pct" style="font-weight:700;">0%</span>
+              </div>
+              <div class="progress-bar-wrap">
+                <div class="progress-bar-fill" id="density-bar" style="width:0%;background:var(--green);"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Module status -->
+          <div class="card">
+            <div class="card-title mb-16">⚡ Module Status</div>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;">
+                <span>YOLO + BoT-SORT + GNN</span>
+                <span class="status-pill" id="st-yolo">offline</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;">
+                <span>SUMO Simulation</span>
+                <span class="status-pill stub">NOT IMPLEMENTED</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;">
+                <span>Federated MARL</span>
+                <span class="status-pill stub">NOT IMPLEMENTED</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;">
+                <span>Emergency Detection</span>
+                <span class="status-pill stub">NOT IMPLEMENTED</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;">
+                <span>WebSocket</span>
+                <span class="status-pill" id="st-ws">offline</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- GNN details -->
+          <div class="card">
+            <div class="card-title mb-16">🧠 GNN Inference</div>
+            <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
+              <div style="display:flex;justify-content:space-between;">
+                <span style="color:var(--gray);">Model</span>
+                <span>TrafficGNN (2×GCN)</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;">
+                <span style="color:var(--gray);">Weights</span>
+                <span>traffic_gnn.pth</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;">
+                <span style="color:var(--gray);">Prediction</span>
+                <span id="gnn-detail" style="font-weight:700;color:var(--green);">LOW</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;">
+                <span style="color:var(--gray);">Classes</span>
+                <span>LOW / MEDIUM / HIGH</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vehicle count vs time chart -->
+      <div class="card mb-24">
+        <div class="card-header">
+          <div class="card-title">📈 Vehicle Count vs Time</div>
+          <span class="badge badge-live">LIVE</span>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="chart-count"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================
+         PAGE: LIVE TRAFFIC
+         =================================================== -->
+    <section id="page-live" class="page">
+      <h1 style="font-size:22px;font-weight:800;margin-bottom:4px;">Live Traffic Detection</h1>
+      <p class="text-gray mb-24">Real-time YOLO + BoT-SORT tracking with per-vehicle details</p>
+
+      <div class="two-col mb-24">
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div class="card-header" style="padding:16px 20px;">
+            <div class="card-title">📹 Camera Feed</div>
+            <span class="badge badge-live" id="live-feed-badge">OFFLINE</span>
+          </div>
+          <div id="video-container-2" style="background:#000;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;">
+            <img id="video-feed-2" style="width:100%;height:100%;object-fit:contain;display:none;" alt="Live feed 2" />
+            <div id="video-placeholder-2" style="text-align:center;color:var(--gray);">
+              <div style="font-size:48px;margin-bottom:12px;">📷</div>
+              <p style="font-size:13px;">Start Detection to see live feed</p>
+            </div>
+          </div>
+          <div style="padding:14px 20px;display:flex;gap:10px;border-top:1px solid var(--border);">
+            <button class="btn btn-green" onclick="startDetection()">▶ Start Detection</button>
+            <button class="btn btn-red"   onclick="stopDetection()">⏹ Stop</button>
+          </div>
+        </div>
+
+        <!-- Per-detection list -->
+        <div class="card">
+          <div class="card-title mb-16">🚗 Detected Vehicles (Current Frame)</div>
+          <div id="detection-list" style="max-height:360px;overflow-y:auto;">
+            <p style="color:var(--gray);font-size:12px;">No vehicles detected yet.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vehicle type distribution -->
+      <div class="two-col">
+        <div class="card">
+          <div class="card-title mb-16">🍩 Vehicle Type Distribution</div>
+          <div style="display:flex;gap:24px;align-items:center;">
+            <div style="flex:1;max-width:180px;">
+              <canvas id="chart-donut"></canvas>
+            </div>
+            <div class="type-legend">
+              <div class="type-legend-item">
+                <div class="type-dot" style="background:var(--blue);"></div>
+                <span>Cars</span>
+                <span class="count" id="legend-cars">0</span>
+              </div>
+              <div class="type-legend-item">
+                <div class="type-dot" style="background:var(--purple);"></div>
+                <span>Motorcycles</span>
+                <span class="count" id="legend-moto">0</span>
+              </div>
+              <div class="type-legend-item">
+                <div class="type-dot" style="background:var(--yellow);"></div>
+                <span>Buses</span>
+                <span class="count" id="legend-buses">0</span>
+              </div>
+              <div class="type-legend-item">
+                <div class="type-dot" style="background:var(--pink);"></div>
+                <span>Trucks</span>
+                <span class="count" id="legend-trucks">0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title mb-16">📊 Density vs Time</div>
+          <div class="chart-wrapper">
+            <canvas id="chart-density"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================
+         PAGE: TRAFFIC ANALYSIS
+         =================================================== -->
+    <section id="page-analysis" class="page">
+      <h1 style="font-size:22px;font-weight:800;margin-bottom:4px;">Traffic Analysis</h1>
+      <p class="text-gray mb-24">Historical charts and traffic flow metrics</p>
+
+      <div class="two-col mb-24">
+        <div class="card">
+          <div class="card-title mb-16">📈 Traffic Level vs Time</div>
+          <div class="chart-wrapper">
+            <canvas id="chart-level"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title mb-16">🌊 Traffic Flow</div>
+          <div class="chart-wrapper">
+            <canvas id="chart-flow"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="three-col mb-24">
+        <div class="stat-card blue">
+          <div class="stat-icon">⏱️</div>
+          <div class="stat-label">Avg Wait Time</div>
+          <div class="stat-value" style="font-size:20px;">N/A</div>
+          <div class="stat-sub">SUMO not connected</div>
+        </div>
+        <div class="stat-card purple">
+          <div class="stat-icon">🚦</div>
+          <div class="stat-label">Queue Length</div>
+          <div class="stat-value" style="font-size:20px;">N/A</div>
+          <div class="stat-sub">SUMO not connected</div>
+        </div>
+        <div class="stat-card cyan">
+          <div class="stat-icon">📍</div>
+          <div class="stat-label">Intersections</div>
+          <div class="stat-value" style="font-size:20px;">3</div>
+          <div class="stat-sub">Configured (stubs)</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title mb-16">📊 Vehicle Count History</div>
+        <div class="chart-wrapper" style="height:240px;">
+          <canvas id="chart-history"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================
+         PAGE: TRAFFIC SIGNALS
+         =================================================== -->
+    <section id="page-signals" class="page">
+      <h1 style="font-size:22px;font-weight:800;margin-bottom:4px;">Traffic Signal Control</h1>
+      <p class="text-gray mb-24">Intersection signal states driven by MARL (NOT IMPLEMENTED YET)</p>
+
+      <div class="not-impl-banner">
+        <span class="icon">⚠️</span>
+        <div class="text">
+          <strong>NOT IMPLEMENTED YET:</strong> Traffic light control requires the
+          Federated MARL agent and SUMO integration to be implemented.
+          The signal displays below show placeholder states. Once the
+          <code>marl_agent.py</code> and <code>sumo_bridge.py</code> are implemented,
+          this page will display real signal decisions automatically.
+        </div>
+      </div>
+
+      <div class="three-col" id="intersections-grid">
+        <!-- Rendered by JS -->
+      </div>
+
+      <div class="card">
+        <div class="card-title mb-16">⏱️ Signal Phase Duration</div>
+        <div class="chart-wrapper">
+          <canvas id="chart-phase"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================
+         PAGE: SUMO SIMULATION
+         =================================================== -->
+    <section id="page-sumo" class="page">
+      <h1 style="font-size:22px;font-weight:800;margin-bottom:4px;">SUMO Simulation</h1>
+      <p class="text-gray mb-24">Traffic microsimulation via TraCI</p>
+
+      <div class="not-impl-banner">
+        <span class="icon">⚠️</span>
+        <div class="text">
+          <strong>NOT IMPLEMENTED YET:</strong>
+          The <code>sumo/</code> directory exists but contains empty
+          <code>networks/</code>, <code>routes/</code> and <code>simulations/</code> sub-folders.
+          Add <code>.net.xml</code>, <code>.rou.xml</code> and <code>.sumocfg</code> files,
+          then update <code>backend/sumo_bridge.py</code> with TraCI calls to enable this panel.
+        </div>
+      </div>
+
+      <!-- Connection status -->
+      <div class="card mb-24">
+        <div class="card-header">
+          <div class="card-title">🛣️ SUMO Connection Status</div>
+          <span class="status-pill stub">NOT IMPLEMENTED</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;">
+          <div>
+            <div class="stat-label">Status</div>
+            <div id="sumo-status" style="font-weight:700;color:var(--red);margin-top:4px;">Disconnected</div>
+          </div>
+          <div>
+            <div class="stat-label">Sim Time</div>
+            <div id="sumo-time" style="font-weight:700;margin-top:4px;">0.0s</div>
+          </div>
+          <div>
+            <div class="stat-label">Vehicles</div>
+            <div id="sumo-vehicles" style="font-weight:700;margin-top:4px;">0</div>
+          </div>
+          <div>
+            <div class="stat-label">Avg Wait</div>
+            <div id="sumo-wait" style="font-weight:700;margin-top:4px;">0.0s</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SUMO controls -->
+      <div class="card mb-24">
+        <div class="card-title mb-16">🎮 Simulation Controls</div>
+        <div class="btn-row">
+          <button class="btn btn-green" onclick="sumoControl('start')" disabled>▶ Start Simulation</button>
+          <button class="btn btn-red"   onclick="sumoControl('stop')"  disabled>⏹ Stop Simulation</button>
+          <button class="btn btn-yellow" onclick="sumoControl('reset')" disabled>↺ Reset Simulation</button>
+        </div>
+        <p class="text-gray" style="margin-top:10px;">Buttons are disabled until SUMO integration is implemented.</p>
+      </div>
+
+      <!-- Placeholder stats -->
+      <div class="three-col">
+        <div class="stat-card blue">
+          <div class="stat-icon">🌊</div>
+          <div class="stat-label">Traffic Flow</div>
+          <div class="stat-value" style="font-size:20px;">N/A</div>
+        </div>
+        <div class="stat-card purple">
+          <div class="stat-icon">🚦</div>
+          <div class="stat-label">Queue Length</div>
+          <div class="stat-value" style="font-size:20px;">N/A</div>
+        </div>
+        <div class="stat-card yellow">
+          <div class="stat-icon">⏱️</div>
+          <div class="stat-label">Wait Time</div>
+          <div class="stat-value" style="font-size:20px;">N/A</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================
+         PAGE: FEDERATED MARL
+         =================================================== -->
+    <section id="page-marl" class="page">
+      <h1 style="font-size:22px;font-weight:800;margin-bottom:4px;">Federated MARL</h1>
+      <p class="text-gray mb-24">Multi-Agent Reinforcement Learning for traffic light control</p>
+
+      <div class="not-impl-banner">
+        <span class="icon">⚠️</span>
+        <div class="text">
+          <strong>NOT IMPLEMENTED YET:</strong>
+          The Federated Multi-Agent RL module has not been developed yet.
+          When implemented, update <code>backend/marl_agent.py</code> and this
+          panel will automatically display real agent data via WebSocket.
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;">
+        <div class="stat-card blue">
+          <div class="stat-icon">🤖</div>
+          <div class="stat-label">Agents</div>
+          <div class="stat-value" id="marl-agents">0</div>
+        </div>
+        <div class="stat-card purple">
+          <div class="stat-icon">🗺️</div>
+          <div class="stat-label">Intersections</div>
+          <div class="stat-value" id="marl-intersections">0</div>
+        </div>
+        <div class="stat-card cyan">
+          <div class="stat-icon">📚</div>
+          <div class="stat-label">Training Episode</div>
+          <div class="stat-value" id="marl-episode">0</div>
+        </div>
+        <div class="stat-card green">
+          <div class="stat-icon">🏆</div>
+          <div class="stat-label">Current Reward</div>
+          <div class="stat-value" id="marl-reward" style="font-size:18px;">N/A</div>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="card">
+          <div class="card-title mb-16">📡 Agent Status</div>
+          <div style="display:flex;flex-direction:column;gap:10px;font-size:12px;">
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:var(--gray);">Local Training</span>
+              <span id="marl-local-status" class="status-pill stub">NOT IMPLEMENTED</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:var(--gray);">Global Aggregation</span>
+              <span id="marl-global-status" class="status-pill stub">NOT IMPLEMENTED</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:var(--gray);">Global Model Version</span>
+              <span id="marl-version">v0</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:var(--gray);">Latest RL Action</span>
+              <span id="marl-action">None</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:var(--gray);">Training Round</span>
+              <span id="marl-round">0</span>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title mb-16">📊 Reward History</div>
+          <div class="chart-wrapper">
+            <canvas id="chart-reward"></canvas>
+          </div>
+          <p class="text-gray" style="margin-top:8px;">Data will appear once MARL is implemented.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================
+         PAGE: EMERGENCY PRIORITY
+         =================================================== -->
+    <section id="page-emergency" class="page">
+      <h1 style="font-size:22px;font-weight:800;margin-bottom:4px;">Emergency Vehicle Priority</h1>
+      <p class="text-gray mb-24">Emergency detection and signal preemption</p>
+
+      <div class="not-impl-banner">
+        <span class="icon">⚠️</span>
+        <div class="text">
+          <strong>NOT IMPLEMENTED YET:</strong>
+          Emergency vehicle detection has not been implemented.
+          When added to <code>backend/marl_agent.py</code> (EmergencyVehicleDetector class),
+          this panel will display real-time emergency status automatically.
+        </div>
+      </div>
+
+      <div class="two-col mb-24">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🚨 Emergency Status</div>
+            <span class="status-pill stub" id="emerg-status-pill">NOT DETECTED</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px;font-size:12px;">
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:var(--gray);">Detected</span>
+              <span id="emerg-detected" style="font-weight:700;">No</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:var(--gray);">Vehicle Type</span>
+              <span id="emerg-type">—</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:var(--gray);">Location / Lane</span>
+              <span id="emerg-location">—</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:var(--gray);">Detection Time</span>
+              <span id="emerg-time">—</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:var(--gray);">Priority Status</span>
+              <span id="emerg-priority">—</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:var(--gray);">Affected Intersection</span>
+              <span id="emerg-intersection">—</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:var(--gray);">Signal Priority Active</span>
+              <span id="emerg-signal">No</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title mb-16">📖 How It Will Work</div>
+          <div style="font-size:12px;color:var(--light);line-height:1.8;">
+            <p>1. Add emergency vehicle detection logic to <code>EmergencyVehicleDetector.process_frame()</code> in <code>backend/marl_agent.py</code></p>
+            <br/>
+            <p>2. The detection engine will call <code>emergency_det.process_frame(frame_data)</code> each frame</p>
+            <br/>
+            <p>3. The FastAPI WebSocket will broadcast the emergency state to this dashboard automatically</p>
+            <br/>
+            <p>4. The traffic signal control page will reflect the preemption state</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================
+         PAGE: SYSTEM LOGS
+         =================================================== -->
+    <section id="page-logs" class="page">
+      <h1 style="font-size:22px;font-weight:800;margin-bottom:4px;">System Logs</h1>
+      <p class="text-gray mb-24">Server events and detection history</p>
+
+      <div class="card mb-24">
+        <div class="card-header">
+          <div class="card-title">📋 Event Log</div>
+          <button class="btn btn-gray" onclick="clearLogs()" style="padding:6px 14px;font-size:12px;">Clear</button>
+        </div>
+        <div style="max-height:400px;overflow-y:auto;">
+          <table class="log-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Level</th>
+                <th>Message</th>
+              </tr>
+            </thead>
+            <tbody id="log-body">
+              <tr><td colspan="3" style="color:var(--gray);text-align:center;padding:20px;">
+                No logs yet. Start detection to see events.
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================
+         PAGE: SETTINGS
+         =================================================== -->
+    <section id="page-settings" class="page">
+      <h1 style="font-size:22px;font-weight:800;margin-bottom:4px;">Settings</h1>
+      <p class="text-gray mb-24">System configuration</p>
+
+      <div class="two-col">
+        <div class="card">
+          <div class="card-title mb-16">🎛️ Detection Settings</div>
+          <div style="display:flex;flex-direction:column;gap:14px;font-size:13px;">
+            <div>
+              <label style="display:block;color:var(--gray);font-size:11px;margin-bottom:6px;">Video Source</label>
+              <input type="text" value="yolo_traffic mp4 .mp4" readonly
+                style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--light);
+                       padding:8px 12px;border-radius:6px;font-family:inherit;font-size:12px;" />
+            </div>
+            <div>
+              <label style="display:block;color:var(--gray);font-size:11px;margin-bottom:6px;">YOLO Model</label>
+              <input type="text" value="yolo11n.pt" readonly
+                style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--light);
+                       padding:8px 12px;border-radius:6px;font-family:inherit;font-size:12px;" />
+            </div>
+            <div>
+              <label style="display:block;color:var(--gray);font-size:11px;margin-bottom:6px;">Tracker</label>
+              <input type="text" value="BoT-SORT (botsort.yaml)" readonly
+                style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--light);
+                       padding:8px 12px;border-radius:6px;font-family:inherit;font-size:12px;" />
+            </div>
+            <div>
+              <label style="display:block;color:var(--gray);font-size:11px;margin-bottom:6px;">GNN Weights</label>
+              <input type="text" value="traffic_gnn.pth" readonly
+                style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--light);
+                       padding:8px 12px;border-radius:6px;font-family:inherit;font-size:12px;" />
+            </div>
+            <div>
+              <label style="display:block;color:var(--gray);font-size:11px;margin-bottom:6px;">Max Vehicles (density ref.)</label>
+              <input type="number" value="20" readonly
+                style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--light);
+                       padding:8px 12px;border-radius:6px;font-family:inherit;font-size:12px;" />
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title mb-16">🌐 Backend Info</div>
+          <div style="display:flex;flex-direction:column;gap:10px;font-size:12px;">
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:var(--gray);">Backend Framework</span>
+              <span>FastAPI</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:var(--gray);">WebSocket URL</span>
+              <span id="ws-url-display" style="font-family:monospace;">—</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:var(--gray);">API Base</span>
+              <span style="font-family:monospace;">http://localhost:8000</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:var(--gray);">WS Update Rate</span>
+              <span>~10 fps</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:var(--gray);">Chart History</span>
+              <span>120 points (~2 min)</span>
+            </div>
+          </div>
+
+          <div style="margin-top:20px;">
+            <div class="card-title mb-16" style="font-size:13px;">🔌 Module Implementation Status</div>
+            <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
+              <div style="display:flex;justify-content:space-between;">
+                <span>YOLO v11 Detection</span>
+                <span style="color:var(--green);font-weight:600;">✅ IMPLEMENTED</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;">
+                <span>BoT-SORT Tracking</span>
+                <span style="color:var(--green);font-weight:600;">✅ IMPLEMENTED</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;">
+                <span>GNN Inference</span>
+                <span style="color:var(--green);font-weight:600;">✅ IMPLEMENTED</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;">
+                <span>SUMO / TraCI</span>
+                <span style="color:var(--red);font-weight:600;">❌ NOT IMPLEMENTED</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;">
+                <span>Federated MARL</span>
+                <span style="color:var(--red);font-weight:600;">❌ NOT IMPLEMENTED</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;">
+                <span>Emergency Detection</span>
+                <span style="color:var(--red);font-weight:600;">❌ NOT IMPLEMENTED</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div><!-- /pages -->
+</div><!-- /main-content -->
+
+<script src="/static/app.js"></script>
+</body>
+</html>
